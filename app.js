@@ -12,9 +12,13 @@
     sortSelect: document.getElementById('sort-select'),
     ownershipChecks: document.getElementById('ownership-checks'),
     parkingFilter: document.getElementById('parking-filter'),
+    priceMin: document.getElementById('price-min'),
+    priceMax: document.getElementById('price-max'),
     keyword: document.getElementById('keyword-filter'),
     resetBtn: document.getElementById('reset-filters'),
     errorBox: document.getElementById('error-box'),
+    saveFavBtn: document.getElementById('save-fav-btn'),
+    favoritesRow: document.getElementById('favorites-row'),
   };
 
   // On GitHub Pages there's no local proxy, so calls go to the deployed Cloudflare
@@ -24,6 +28,81 @@
 
   let state = { listings: [], ownershipTypes: [] };
   const LAST_URL_KEY = 'realtor-filter:last-url';
+  const FAVORITES_KEY = 'realtor-filter:favorites';
+  const DEFAULT_FAVORITES = [
+    {
+      label: '1BR rentals ≤$1750, KW',
+      url: 'https://www.realtor.ca/map#ZoomLevel=11&Center=43.453357%2C-80.500448&LatitudeMax=43.60172&LongitudeMax=-80.10185&LatitudeMin=43.30463&LongitudeMin=-80.89905&view=list&Sort=6-D&PropertyTypeGroupID=1&TransactionTypeId=3&PropertySearchTypeId=0&RentMax=1750&BedRange=1-1&BathRange=1-1&Currency=CAD',
+    },
+  ];
+
+  function loadFavorites() {
+    try {
+      const raw = localStorage.getItem(FAVORITES_KEY);
+      if (raw === null) {
+        localStorage.setItem(FAVORITES_KEY, JSON.stringify(DEFAULT_FAVORITES));
+        return [...DEFAULT_FAVORITES];
+      }
+      return JSON.parse(raw);
+    } catch (e) {
+      return [...DEFAULT_FAVORITES];
+    }
+  }
+
+  function saveFavoritesList(list) {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+  }
+
+  function renderFavorites() {
+    const favorites = loadFavorites();
+    els.favoritesRow.innerHTML = favorites.length
+      ? favorites
+          .map(
+            (f, i) => `
+        <button type="button" class="fav-chip" data-index="${i}">
+          <span class="fav-label">${escapeHtml(f.label)}</span>
+          <span class="fav-remove" data-remove-index="${i}" title="Remove">×</span>
+        </button>`
+          )
+          .join('')
+      : '<span class="fav-empty">No saved links yet — click ☆ Save to add this one.</span>';
+
+    els.favoritesRow.querySelectorAll('.fav-remove').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const idx = Number(btn.dataset.removeIndex);
+        const favorites = loadFavorites();
+        favorites.splice(idx, 1);
+        saveFavoritesList(favorites);
+        renderFavorites();
+      });
+    });
+
+    els.favoritesRow.querySelectorAll('.fav-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const idx = Number(chip.dataset.index);
+        const fav = loadFavorites()[idx];
+        if (fav) {
+          els.input.value = fav.url;
+          loadFromUrl(fav.url);
+        }
+      });
+    });
+  }
+
+  function saveCurrentAsFavorite() {
+    const url = els.input.value.trim();
+    if (!url) {
+      showError('Paste a link first, then save it.');
+      return;
+    }
+    const label = window.prompt('Name this saved search:', 'My Search');
+    if (label === null) return;
+    const favorites = loadFavorites();
+    favorites.push({ label: label.trim() || 'Saved search', url });
+    saveFavoritesList(favorites);
+    renderFavorites();
+  }
 
   function setStatus(text) {
     els.status.textContent = text || '';
@@ -117,6 +196,12 @@
         </label>`)
       .join('');
     els.ownershipChecks.querySelectorAll('.ownership-check').forEach(cb => cb.addEventListener('change', applyFiltersAndRender));
+
+    const prices = state.listings.map(l => l.priceSortValue).filter(p => typeof p === 'number');
+    if (prices.length) {
+      els.priceMin.placeholder = `Min (e.g. ${Math.min(...prices)})`;
+      els.priceMax.placeholder = `Max (e.g. ${Math.max(...prices)})`;
+    }
   }
 
   function currentFilters() {
@@ -125,6 +210,8 @@
       ownershipTypes: checkedOwnership,
       parking: els.parkingFilter.value,
       keyword: els.keyword.value.trim().toLowerCase(),
+      priceMin: els.priceMin.value ? Number(els.priceMin.value) : null,
+      priceMax: els.priceMax.value ? Number(els.priceMax.value) : null,
     };
   }
 
@@ -132,6 +219,8 @@
     if (f.ownershipTypes.size && !f.ownershipTypes.has(listing.ownershipType)) return false;
     if (f.parking !== 'any' && listing.parkingStatus !== f.parking) return false;
     if (f.keyword && !listing.searchableText.includes(f.keyword)) return false;
+    if (f.priceMin !== null && (listing.priceSortValue === null || listing.priceSortValue < f.priceMin)) return false;
+    if (f.priceMax !== null && (listing.priceSortValue === null || listing.priceSortValue > f.priceMax)) return false;
     return true;
   }
 
@@ -170,6 +259,7 @@
             ${listing.baths ? `${listing.baths} ba` : '—'} ·
             ${listing.sqft ? escapeHtml(listing.sqft) : 'sqft n/a'}
           </div>
+          ${listing.timeOnRealtor ? `<div class="card-dom">On realtor.ca ${escapeHtml(listing.timeOnRealtor)}</div>` : ''}
           <div class="card-badges">
             ${badge('Parking', listing.parkingStatus)}
             <span class="badge badge-info">${escapeHtml(listing.ownershipType)}</span>
@@ -190,6 +280,8 @@
     els.ownershipChecks.querySelectorAll('.ownership-check').forEach(cb => (cb.checked = true));
     els.parkingFilter.value = 'any';
     els.keyword.value = '';
+    els.priceMin.value = '';
+    els.priceMax.value = '';
     els.sortSelect.value = 'newest';
     applyFiltersAndRender();
   }
@@ -201,7 +293,9 @@
 
   [els.parkingFilter, els.sortSelect].forEach(el => el.addEventListener('change', applyFiltersAndRender));
   els.keyword.addEventListener('input', debounce(applyFiltersAndRender, 250));
+  [els.priceMin, els.priceMax].forEach(el => el.addEventListener('input', debounce(applyFiltersAndRender, 300)));
   els.resetBtn.addEventListener('click', resetFilters);
+  els.saveFavBtn.addEventListener('click', saveCurrentAsFavorite);
 
   function debounce(fn, ms) {
     let t;
@@ -213,4 +307,6 @@
 
   const lastUrl = localStorage.getItem(LAST_URL_KEY);
   if (lastUrl) els.input.value = lastUrl;
+
+  renderFavorites();
 })();

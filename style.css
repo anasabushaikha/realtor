@@ -63,6 +63,57 @@ body {
 #load-btn:hover:not(:disabled) { background: var(--accent-dark); }
 #load-btn:disabled { opacity: 0.6; cursor: default; }
 
+#save-fav-btn {
+  background: white;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#save-fav-btn:hover { background: var(--bg); }
+
+.favorites-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.fav-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fbebe9;
+  color: var(--accent-dark);
+  border: 1px solid #f3d3d0;
+  border-radius: 20px;
+  padding: 5px 8px 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fav-chip:hover { background: #f7ddd9; }
+.fav-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.fav-remove:hover { background: rgba(0,0,0,0.08); color: var(--text); }
+.fav-empty { font-size: 0.82rem; color: var(--text-muted); }
+
+.price-row { display: flex; align-items: center; gap: 8px; }
+.price-row span { color: var(--text-muted); }
+.price-row input { width: 100%; }
+
 .load-status { margin: 10px 0 0; color: var(--text-muted); font-size: 0.9rem; }
 .error-box {
   margin: 10px 0 0;
@@ -90,7 +141,7 @@ body {
 .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; padding: 3px 0; cursor: pointer; }
 .checks-list { max-height: 220px; overflow-y: auto; }
 
-select, input[type="text"] {
+select, input[type="text"], input[type="number"] {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -152,6 +203,7 @@ select, input[type="text"] {
 .card-address { font-size: 0.92rem; font-weight: 600; margin-top: 2px; }
 .card-citystate { font-size: 0.82rem; color: var(--text-muted); }
 .card-stats { font-size: 0.85rem; color: var(--text-muted); margin: 6px 0 4px; }
+.card-dom { font-size: 0.76rem; color: var(--accent); font-weight: 600; margin-bottom: 2px; }
 
 .card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .badge {

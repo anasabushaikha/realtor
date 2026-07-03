@@ -22,7 +22,9 @@
           autocomplete="off"
         />
         <button id="load-btn" type="submit">Load listings</button>
+        <button id="save-fav-btn" type="button" title="Save this link for quick access">☆ Save</button>
       </form>
+      <div id="favorites-row" class="favorites-row"></div>
       <p id="load-status" class="load-status"></p>
       <p id="error-box" class="error-box" hidden></p>
     </section>
@@ -43,6 +45,15 @@
         <div class="filter-group">
           <h3>Title / ownership type</h3>
           <div id="ownership-checks" class="checks-list"></div>
+        </div>
+
+        <div class="filter-group">
+          <h3>Price</h3>
+          <div class="price-row">
+            <input type="number" id="price-min" placeholder="Min" />
+            <span>–</span>
+            <input type="number" id="price-max" placeholder="Max" />
+          </div>
         </div>
 
         <div class="filter-group">
