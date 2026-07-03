@@ -55,6 +55,19 @@ function priceInfo(property) {
   return { display, isRent, sortValue: unformatted };
 }
 
+// realtor.ca sends InsertedDateUTC as .NET DateTime ticks (100ns units since
+// 0001-01-01). 621355968000000000 is the tick count at the Unix epoch.
+const DOTNET_EPOCH_TICKS = 621355968000000000;
+
+/** Days since the listing was inserted into realtor.ca, or null if undeterminable. */
+function deriveDaysOnMarket(raw) {
+  const ticks = num(raw.InsertedDateUTC);
+  if (ticks === null) return null;
+  const ms = (ticks - DOTNET_EPOCH_TICKS) / 10000;
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.floor((Date.now() - ms) / (1000 * 60 * 60 * 24)));
+}
+
 /** Builds the flat record the UI renders/filters from, out of one raw realtor.ca result. */
 function buildListingRecord(raw) {
   const property = raw.Property || {};
@@ -94,6 +107,7 @@ function buildListingRecord(raw) {
     detailsUrl: raw.RelativeDetailsURL ? `https://www.realtor.ca${raw.RelativeDetailsURL}` : null,
     insertedSortValue: num(raw.InsertedDateUTC),
     timeOnRealtor: raw.TimeOnRealtor || '',
+    daysOnMarket: deriveDaysOnMarket(raw),
     searchableText,
     _raw: raw,
   };

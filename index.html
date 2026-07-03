@@ -54,11 +54,18 @@
             <span>–</span>
             <input type="number" id="price-max" placeholder="Max" />
           </div>
+          <p class="field-hint">Changing this re-searches realtor.ca — your link's own price limit only set the initial range.</p>
         </div>
 
         <div class="filter-group">
           <h3>Keyword search</h3>
           <input type="text" id="keyword-filter" placeholder="e.g. townhouse, street name…" />
+        </div>
+
+        <div class="filter-group">
+          <h3>Listed within</h3>
+          <input type="range" id="dom-slider" min="0" max="0" value="0" />
+          <div class="range-label" id="dom-slider-label">Any</div>
         </div>
 
         <button id="reset-filters" type="button" class="reset-btn">Reset filters</button>

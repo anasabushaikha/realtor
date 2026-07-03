@@ -163,6 +163,14 @@ select, input[type="text"], input[type="number"] {
 .reset-btn:hover { background: var(--bg); }
 
 .hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 16px; line-height: 1.4; }
+.field-hint { font-size: 0.74rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.35; }
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 4px 0;
+}
+.range-label { font-size: 0.82rem; color: var(--text-muted); text-align: right; }
 
 .results-area { min-height: 200px; }
 .results-header {

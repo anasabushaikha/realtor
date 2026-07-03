@@ -15,6 +15,8 @@
     priceMin: document.getElementById('price-min'),
     priceMax: document.getElementById('price-max'),
     keyword: document.getElementById('keyword-filter'),
+    domSlider: document.getElementById('dom-slider'),
+    domSliderLabel: document.getElementById('dom-slider-label'),
     resetBtn: document.getElementById('reset-filters'),
     errorBox: document.getElementById('error-box'),
     saveFavBtn: document.getElementById('save-fav-btn'),
@@ -26,7 +28,11 @@
   const isLocalDev = ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const SEARCH_ENDPOINT = isLocalDev ? '/api/search' : 'https://realtor-ca-proxy.anas-abushaikha.workers.dev/';
 
-  let state = { listings: [], ownershipTypes: [] };
+  // originalSearchParams is what the pasted/favorited link decoded to - the price
+  // filter re-searches realtor.ca from this base (see refetchWithPriceFilter),
+  // since realtor.ca only ever returns listings within whatever Price/RentMax the
+  // search itself specifies - there's no fetching "more" from an already-narrower result set.
+  let state = { listings: [], ownershipTypes: [], originalSearchParams: null };
   const LAST_URL_KEY = 'realtor-filter:last-url';
   const FAVORITES_KEY = 'realtor-filter:favorites';
   const DEFAULT_FAVORITES = [
@@ -147,12 +153,39 @@
       showError('Could not read search filters from that link. Paste a realtor.ca map/list URL that includes the map bounds (it should contain "LatitudeMax=" etc. after the #).');
       return;
     }
+    state.originalSearchParams = params;
+    localStorage.setItem(LAST_URL_KEY, rawInput);
+    await performSearch(params, { isFreshLoad: true });
+  }
 
+  /** Rebuilds the realtor.ca query params using the current price filter inputs,
+   *  starting from the originally loaded link (so clearing the price fields
+   *  reverts to whatever bound that link specified, rather than none at all). */
+  function paramsWithPriceOverride() {
+    const base = { ...state.originalSearchParams };
+    const isLease = base.TransactionTypeId === '3';
+    const minKey = isLease ? 'RentMin' : 'PriceMin';
+    const maxKey = isLease ? 'RentMax' : 'PriceMax';
+    const minVal = els.priceMin.value.trim();
+    const maxVal = els.priceMax.value.trim();
+    if (minVal) base[minKey] = minVal;
+    if (maxVal) base[maxKey] = maxVal;
+    return base;
+  }
+
+  function refetchWithPriceFilter() {
+    if (!state.originalSearchParams) return;
+    performSearch(paramsWithPriceOverride(), { isFreshLoad: false });
+  }
+
+  async function performSearch(params, { isFreshLoad }) {
     setLoading(true);
-    els.filtersPanel.hidden = true;
-    els.results.innerHTML = '';
-    els.resultsSummary.textContent = '';
-    setStatus('Searching realtor.ca…');
+    if (isFreshLoad) {
+      els.filtersPanel.hidden = true;
+      els.results.innerHTML = '';
+      els.resultsSummary.textContent = '';
+    }
+    setStatus(isFreshLoad ? 'Searching realtor.ca…' : 'Updating results from realtor.ca…');
 
     try {
       const res = await fetch(SEARCH_ENDPOINT, {
@@ -169,13 +202,11 @@
       state.listings = records;
       state.ownershipTypes = [...new Set(records.map(r => r.ownershipType))].sort();
 
-      localStorage.setItem(LAST_URL_KEY, rawInput);
-
       let statusMsg = `Loaded ${records.length} of ${data.totalRecords} matching listings.`;
       if (data.truncated) statusMsg += ' (realtor.ca has more than this app fetches per search — narrow your map area for full coverage.)';
       setStatus(statusMsg);
 
-      renderFilterOptions();
+      renderFilterOptions(!isFreshLoad);
       els.filtersPanel.hidden = false;
       applyFiltersAndRender();
     } catch (err) {
@@ -187,11 +218,18 @@
     }
   }
 
-  function renderFilterOptions() {
+  function renderFilterOptions(preserveState) {
+    // On a price-triggered refetch, keep whatever the user had explicitly
+    // unchecked - new ownership types that appear at the new price range
+    // default to checked, same as a fresh load.
+    const uncheckedTypes = preserveState
+      ? new Set([...els.ownershipChecks.querySelectorAll('.ownership-check:not(:checked)')].map(cb => cb.value))
+      : new Set();
+
     els.ownershipChecks.innerHTML = state.ownershipTypes
       .map(t => `
         <label class="checkbox-row">
-          <input type="checkbox" class="ownership-check" value="${escapeHtml(t)}" checked />
+          <input type="checkbox" class="ownership-check" value="${escapeHtml(t)}" ${uncheckedTypes.has(t) ? '' : 'checked'} />
           ${escapeHtml(t)}
         </label>`)
       .join('');
@@ -202,6 +240,18 @@
       els.priceMin.placeholder = `Min (e.g. ${Math.min(...prices)})`;
       els.priceMax.placeholder = `Max (e.g. ${Math.max(...prices)})`;
     }
+
+    const domValues = state.listings.map(l => l.daysOnMarket).filter(d => typeof d === 'number');
+    const maxDom = domValues.length ? Math.max(...domValues) : 0;
+    const wasAtMax = preserveState && Number(els.domSlider.value) >= Number(els.domSlider.max);
+    const domValue = preserveState && !wasAtMax ? Math.min(Number(els.domSlider.value), maxDom) : maxDom;
+    els.domSlider.max = String(maxDom);
+    els.domSlider.value = String(domValue);
+    updateDomSliderLabel(domValue, maxDom);
+  }
+
+  function updateDomSliderLabel(value, max) {
+    els.domSliderLabel.textContent = value >= max ? 'Any' : `${value} day${value === 1 ? '' : 's'} or less`;
   }
 
   function currentFilters() {
@@ -212,6 +262,8 @@
       keyword: els.keyword.value.trim().toLowerCase(),
       priceMin: els.priceMin.value ? Number(els.priceMin.value) : null,
       priceMax: els.priceMax.value ? Number(els.priceMax.value) : null,
+      domMax: Number(els.domSlider.value),
+      domAtMax: Number(els.domSlider.value) >= Number(els.domSlider.max),
     };
   }
 
@@ -221,6 +273,7 @@
     if (f.keyword && !listing.searchableText.includes(f.keyword)) return false;
     if (f.priceMin !== null && (listing.priceSortValue === null || listing.priceSortValue < f.priceMin)) return false;
     if (f.priceMax !== null && (listing.priceSortValue === null || listing.priceSortValue > f.priceMax)) return false;
+    if (!f.domAtMax && (listing.daysOnMarket === null || listing.daysOnMarket === undefined || listing.daysOnMarket > f.domMax)) return false;
     return true;
   }
 
@@ -280,10 +333,14 @@
     els.ownershipChecks.querySelectorAll('.ownership-check').forEach(cb => (cb.checked = true));
     els.parkingFilter.value = 'any';
     els.keyword.value = '';
+    els.domSlider.value = els.domSlider.max;
+    updateDomSliderLabel(Number(els.domSlider.value), Number(els.domSlider.max));
+    els.sortSelect.value = 'newest';
+    const priceChanged = els.priceMin.value !== '' || els.priceMax.value !== '';
     els.priceMin.value = '';
     els.priceMax.value = '';
-    els.sortSelect.value = 'newest';
-    applyFiltersAndRender();
+    if (priceChanged) refetchWithPriceFilter();
+    else applyFiltersAndRender();
   }
 
   els.form.addEventListener('submit', e => {
@@ -293,7 +350,12 @@
 
   [els.parkingFilter, els.sortSelect].forEach(el => el.addEventListener('change', applyFiltersAndRender));
   els.keyword.addEventListener('input', debounce(applyFiltersAndRender, 250));
-  [els.priceMin, els.priceMax].forEach(el => el.addEventListener('input', debounce(applyFiltersAndRender, 300)));
+  [els.priceMin, els.priceMax].forEach(el => el.addEventListener('input', debounce(refetchWithPriceFilter, 600)));
+  const debouncedApplyFilters = debounce(applyFiltersAndRender, 80);
+  els.domSlider.addEventListener('input', () => {
+    updateDomSliderLabel(Number(els.domSlider.value), Number(els.domSlider.max));
+    debouncedApplyFilters();
+  });
   els.resetBtn.addEventListener('click', resetFilters);
   els.saveFavBtn.addEventListener('click', saveCurrentAsFavorite);
 
